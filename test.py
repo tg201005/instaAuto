@@ -15,6 +15,8 @@ import requests
 import pytz
 
 
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
 # 한국 시간(KST) 타임존 설정
 kst = pytz.timezone("Asia/Seoul")
 
@@ -58,6 +60,9 @@ def click_next_buttons(driver):
     print("다음 버튼 클릭 완료")
 
 
+from selenium.webdriver.common.keys import Keys
+
+
 def enter_description(driver, description):
     print("설명 입력 중...")
     description_box = WebDriverWait(driver, 20).until(
@@ -67,8 +72,17 @@ def enter_description(driver, description):
     )
     description_box.click()
     description_box.send_keys(description)
-    description_box.click()  # 줄바꿈 추가
-
+    description_box.send_keys(Keys.RETURN)
+    description_box.click()
+    # div_button = WebDriverWait(driver, 20).until(
+    #     EC.element_to_be_clickable(
+    #         (
+    #             By.XPATH,
+    #             '//div[contains(@class, "x1qjc9v5") and contains(@class, "x9f619") and contains(@class, "x78zum5") and @role="button" and @tabindex="0"]',
+    #         )
+    #     )
+    # )
+    # div_button.click()
     print("설명 입력 완료")
 
 
@@ -382,10 +396,9 @@ def make_description(data):
         description_lines.append(f"@{user}")
 
     # 설명
-    description_lines.append("자동 업로드된 이미지입니다.")
 
     # 전체 설명을 하나의 문자열로 결합
-    description = "\n".join(description_lines)
+    description = "\n".join(description_lines) + "\n"
 
     return description
 
@@ -420,7 +433,7 @@ def upload_photos(driver, image_paths, data):
     click_next_buttons(driver)
     description = make_description(data)
     enter_description(driver, description)
-    time.sleep(2)  # Wait for the description to be entered
+    time.sleep(10)  # Wait for the description to be entered
     share_post(driver)
     print("사진 업로드 완료")
 
