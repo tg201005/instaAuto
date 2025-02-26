@@ -38,12 +38,11 @@ def click_save_info_button(driver):
     print("로그인 정보 저장 버튼 클릭 중...")
     save_info_button = WebDriverWait(driver, 200).until(
         EC.element_to_be_clickable(
-            (By.CSS_SELECTOR, "button._acan._acap._acas._aj1-._ap30")
+            (By.XPATH, "//div[contains(@class, 'x1i10hfl') and contains(@role, 'button')]//span[contains(text(), '저장')]")
         )
     )
     save_info_button.click()
     print("로그인 정보 저장 버튼 클릭 완료")
-
 
 def click_next_buttons(driver):
     print("다음 버튼 클릭 중...")

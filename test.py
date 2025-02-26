@@ -37,11 +37,12 @@ id_list = [
 ]
 
 
+
 def click_save_info_button(driver):
     print("로그인 정보 저장 버튼 클릭 중...")
     save_info_button = WebDriverWait(driver, 200).until(
         EC.element_to_be_clickable(
-            (By.CSS_SELECTOR, "button._acan._acap._acas._aj1-._ap30")
+            (By.XPATH, "//div[contains(@class, 'x1i10hfl') and contains(@role, 'button')]//span[contains(text(), '저장')]")
         )
     )
     save_info_button.click()
@@ -120,6 +121,28 @@ def login_to_instagram(driver, username, password):
     click_save_info_button(driver)
 
 
+from selenium.webdriver.common.action_chains import ActionChains
+
+def click_like_button(driver):
+    try:
+        # '좋아요' 버튼을 찾는 XPath
+        like_button_xpath = "//div[@class='x6s0dn4 x78zum5 xdt5ytf xl56j7k']//span//*[name()='svg' and @aria-label='좋아요']"
+        
+        # 버튼이 로드될 때까지 대기
+        wait = WebDriverWait(driver, 10)
+        like_button = wait.until(EC.element_to_be_clickable((By.XPATH, like_button_xpath)))
+        
+        # 버튼 클릭
+        # like_button.click()
+        # time.sleep(2)  # 대기 시간 추가
+
+                # 마우스 클릭 이벤트를 생성하여 버튼 클릭
+        actions = ActionChains(driver)
+        actions.move_to_element(like_button).click().perform()
+        print("좋아요 버튼을 클릭했습니다.")
+    except Exception as e:
+        print(f"오류가 발생했습니다: {e}")
+
 def collect_info(driver, id_list):
     print("정보 수집 시작...")
     data = []
@@ -158,6 +181,9 @@ def collect_info(driver, id_list):
             except:
                 print(f"{user_id}의 게시물에 '더 보기' 버튼 없음")
 
+            click_like_button(driver)
+                
+
             # 게시물 텍스트 및 이미지 추출
             post_text = driver.find_element(
                 By.CSS_SELECTOR, "div._aagu div._aagv img"
@@ -169,9 +195,16 @@ def collect_info(driver, id_list):
                 By.XPATH, '//time[@class="x1p4m5qa"]'
             ).get_attribute("datetime")
             # 게시물 설명 추출
-            post_description = driver.find_element(
-                By.CSS_SELECTOR, "h1._ap3a._aaco._aacu._aacx._aad7._aade"
-            ).text
+            try :
+
+                post_description = driver.find_element(
+                    By.CSS_SELECTOR, "h1._ap3a._aaco._aacu._aacx._aad7._aade"
+                
+                ).text
+            except:
+                post_description =""
+
+
             # UTC 시간대를 한국 시간대로 변환
             post_datetime_utc = datetime.strptime(
                 post_datetime_utc, "%Y-%m-%dT%H:%M:%S.%fZ"
@@ -216,17 +249,34 @@ def save_to_csv(data):
 
 
 def evaluate_success(data):
-    print("성공/실패 평가 중...")
-    success_list = []
-    failure_list = []
+
+    # CSV 파일 로드
+    df = pd.read_csv("instagram_data.csv")
+
+    # 어제 날짜 계산 (형식: 'YYYY-MM-DD')
     yesterday = (datetime.now() - timedelta(1)).strftime("%Y-%m-%d")
 
-    for index, row in data.iterrows():
-        post_date = datetime.fromisoformat(row["post_datetime"].split("T")[0])
-        if post_date.strftime("%Y-%m-%d") >= yesterday:
-            success_list.append(row["user_id"])
+    success_list = []
+    failure_list = []
+
+    # 각 user_id에 대해 처리
+    for user_id in df["user_id"].unique():
+        # 해당 user_id의 데이터 정렬 (post_datetime 기준으로 내림차순)
+        user_data = df[df["user_id"] == user_id].sort_values(by="post_datetime", ascending=False)
+
+        # 가장 최근 레코드 가져오기
+        if len(user_data) > 0:
+            most_recent = user_data.iloc[0]
+            most_recent_date = most_recent["post_datetime"].split()[0]  # 'YYYY-MM-DD'만 추출
+
+            # 최근 데이터의 날짜가 어제인지 확인
+            if most_recent_date == yesterday:
+                success_list.append(user_id)
+            else:
+                failure_list.append(user_id)
         else:
-            failure_list.append(row["user_id"])
+            # 데이터가 전혀 없는 경우 실패로 간주
+            failure_list.append(user_id)
 
     print("성공한 사람:", success_list)
     print("실패한 사람:", failure_list)
@@ -239,7 +289,7 @@ def create_square_image(success_list, failure_list, data):
     img_size = 500
     img = Image.new("RGB", (img_size, img_size), color=(255, 255, 255))
     d = ImageDraw.Draw(img)
-    font_path = "/System/Library/Fonts/Supplemental/AppleGothic.ttf"
+    font_path = "/Users/leetaekwon/Desktop/instaAuto/BMEuljiro10yearslaterOTF.otf"
     font_size = 20
     font = ImageFont.truetype(font_path, font_size)
     bold_font = ImageFont.truetype(font_path, font_size + 5)
@@ -270,111 +320,84 @@ def create_square_image(success_list, failure_list, data):
     d.text((50, y_text), "실패한 사람:", font=font, fill=(0, 0, 0))
     y_text += 20
     for user in failure_list:
-        d.text((50, y_text), user, font=font, fill=(255, 0, 0))
+        upload_time = data[data["user_id"] == user]["post_datetime"].values[0]
+        # d.text((50, y_text), user, font=font, fill=(255, 0, 0))
+        user_info = f"{user} + {upload_time}"
+        d.text((50, y_text), user_info, font=font, fill=(255, 0, 0))
         y_text += 20
     img_path = "result_image.png"
     img.save(img_path)
     print("요약 이미지 생성 완료")
     return img_path
 
-
-import os
+import pandas as pd
+import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw, ImageFont
-import textwrap
-
+from datetime import datetime
+import os
 
 def create_post_images(data, success_list):
-    print("포스트 이미지 생성 중...")
-    image_paths = []
-    output_folder = "output_images"
-    os.makedirs(output_folder, exist_ok=True)  # 하위 폴더 생성
+    # 중복 제거
+    data = data.drop_duplicates(subset=["user_id", "post_datetime"])
 
-    for index, row in data.iterrows():
-        if row["user_id"] in success_list:
-            user_id = row["user_id"]
+    # 어제 날짜 계산
+    yesterday = (datetime.now().strftime("%Y-%m-%d"))
 
-            # Create image with post image
-            print(f"{user_id}의 이미지 생성 중...")
-            img = Image.open(requests.get(row["post_image"], stream=True).raw)
-            d = ImageDraw.Draw(img)
-            font_path = "/System/Library/Fonts/Supplemental/AppleGothic.ttf"
-            font_size = 40  # ID가 잘 보이도록 글꼴 크기를 크게 설정
-            font = ImageFont.truetype(font_path, font_size)
+    # 이미지 설정
+    img_width, img_height = 1000, 600
+    img = Image.new("RGB", (img_width, img_height), "white")
+    draw = ImageDraw.Draw(img)
 
-            # 텍스트 위치 계산
-            bbox = d.textbbox((0, 0), user_id, font=font)
-            text_width = bbox[2] - bbox[0]
-            text_position = (
-                (img.width - text_width) / 2,
-                img.height * 0.05,
-            )  # 이미지 상단 5% 지점에 배치
+    # 폰트 설정 (구글 폰트 'Noto Sans KR')
+    font_path = "/Users/leetaekwon/Desktop/instaAuto/BMEuljiro10yearslaterOTF.otf"  # 폰트 경로 확인 및 수정 필요
+    font_title = ImageFont.truetype(font_path, 40)
+    font_text = ImageFont.truetype(font_path, 20)
+    font_bold = ImageFont.truetype(font_path, 25)
 
-            # 음영 효과 추가 (흰색 배경)
-            shadow_offset = 2
-            d.text(
-                (text_position[0] + shadow_offset, text_position[1] + shadow_offset),
-                user_id,
-                font=font,
-                fill=(0, 0, 0),
-            )
-            d.text(
-                (text_position[0] - shadow_offset, text_position[1] - shadow_offset),
-                user_id,
-                font=font,
-                fill=(0, 0, 0),
-            )
-            d.text(
-                (text_position[0] + shadow_offset, text_position[1] - shadow_offset),
-                user_id,
-                font=font,
-                fill=(0, 0, 0),
-            )
-            d.text(
-                (text_position[0] - shadow_offset, text_position[1] + shadow_offset),
-                user_id,
-                font=font,
-                fill=(0, 0, 0),
-            )
+    # 제목
+    draw.text((50, 30), f"Instagram Post Summary - {yesterday}", fill="black", font=font_title)
 
-            # 본 텍스트 (검정색)
-            d.text(text_position, user_id, font=font, fill=(255, 255, 255))
+    # 성공/실패 데이터 분리
+    success_data = data[data["user_id"].isin(success_list)]
+    failure_data = data[~data["user_id"].isin(success_list)]
 
-            img_path = os.path.join(output_folder, f"{user_id}_post_image.png")
-            img.save(img_path)
-            image_paths.append(img_path)
-            print(f"{user_id}의 이미지 생성 완료")
+    # 표를 생성하기 위해 Matplotlib 사용
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.axis('off')
+    table_data = [["User ID", "Posts Count", "Post Date"]]
 
-            # Create image with post text
-            print(f"{user_id}의 텍스트 이미지 생성 중...")
-            text_img = Image.new("RGB", (500, 500), color=(255, 255, 255))
-            d = ImageDraw.Draw(text_img)
-            font_size = 20
-            font = ImageFont.truetype(font_path, font_size)
+    for _, row in success_data.iterrows():
+        table_data.append([row["user_id"], row["posts_count"], row["post_datetime"]])
 
-            # 텍스트 줄바꿈 처리
-            max_width = 480  # 텍스트를 그릴 최대 너비
-            post_description = str(row["post_description"])  # 문자열로 변환
-            lines = textwrap.wrap(
-                post_description, width=40
-            )  # 적절한 너비로 텍스트를 감쌈
+    table = ax.table(cellText=table_data, colLabels=None, loc='center', cellLoc='center')
+    table.auto_set_font_size(False)
+    table.set_fontsize(12)
+    table.auto_set_column_width(col=list(range(len(table_data[0]))))
 
-            y_text = 40
-            d.text((10, 10), user_id, font=font, fill=(0, 0, 0))  # ID 추가
-            for line in lines:
-                bbox = d.textbbox((0, 0), line, font=font)
-                width = bbox[2] - bbox[0]
-                height = bbox[3] - bbox[1]
-                d.text(((500 - width) / 2, y_text), line, font=font, fill=(0, 0, 0))
-                y_text += height
+    # 테이블 스타일 조정
+    for key, cell in table.get_celld().items():
+        if key[0] == 0:
+            cell.set_text_props(fontproperties=font_bold, color="white")
+            cell.set_facecolor("black")
+        else:
+            cell.set_facecolor("#f0f0f0")
 
-            text_img_path = os.path.join(output_folder, f"{user_id}_post_text.png")
-            text_img.save(text_img_path)
-            image_paths.append(text_img_path)
-            print(f"{user_id}의 텍스트 이미지 생성 완료")
+    plt.savefig("table_image.png", bbox_inches='tight')
+    plt.close(fig)
 
-    print("포스트 이미지 생성 완료")
-    return image_paths
+    # 생성된 테이블 이미지를 Pillow 이미지에 붙이기
+    table_img = Image.open("table_image.png")
+    img.paste(table_img, (50, 100))
 
+    # 성공한 사용자 수 표시
+    draw.text((50, 500), f"✅ 성공한 사용자 수: {len(success_list)}", fill="green", font=font_bold)
+
+    # 이미지 저장
+    output_path = "instagram_post_summary.png"
+    img.save(output_path)
+    print(f"이미지가 생성되었습니다: {output_path}")
+
+    return output_path
 
 def make_description(data):
     description_lines = []
@@ -452,13 +475,14 @@ def main():
     driver = setup_driver()
     try:
         login_to_instagram(driver, INSTAGRAM_USERNAME, INSTAGRAM_PASSWORD)
-        # data = collect_info(driver, id_list)
-        # save_to_csv(data)
+        data = collect_info(driver, id_list)
+        save_to_csv(data)
         data = pd.read_csv("instagram_data.csv")
         success_list, failure_list = evaluate_success(data)
         summary_image = create_square_image(success_list, failure_list, data)
-        post_images = create_post_images(data, success_list)
-        all_images = [summary_image] + post_images
+        # post_images = create_post_images(data, success_list)
+
+        all_images = [summary_image]
         upload_to_instagram(driver, all_images, data)
 
     finally:
@@ -468,3 +492,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
